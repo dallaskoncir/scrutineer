@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import "dotenv/config";
+import { writeFile } from "node:fs/promises";
 import { Command, Option } from "commander";
+import * as clack from "@clack/prompts";
 import { parseFile, summaryToMarkdown } from "./services/ast-parser.js";
 import { getFileDiff } from "./services/git-diff.js";
-import { runReviewPipeline } from "./services/ai-orchestrator.js";
+import { runReviewPipeline, type ReviewStage } from "./services/ai-orchestrator.js";
+import { buildReportMarkdown } from "./services/report.js";
+import { getRepoSlugFromGit, postPrComment } from "./services/github-client.js";
 import { PROVIDER_IDS, type ProviderId } from "./utils/model-factory.js";
 
 const program = new Command();
@@ -35,6 +39,20 @@ program
     }
   });
 
+const STAGE_MESSAGES: Record<ReviewStage, string> = {
+  "loading-personas": "Loading reviewer personas...",
+  "code-review": "Running code-reviewer pass...",
+  "security-audit": "Running security-auditor pass...",
+  "sandbox-test": "Generating and executing sandbox test...",
+};
+
+interface ReviewOptions {
+  provider: ProviderId;
+  output?: string;
+  pr?: string;
+  repo?: string;
+}
+
 program
   .command("review")
   .description(
@@ -46,34 +64,91 @@ program
       .choices(PROVIDER_IDS)
       .default("anthropic"),
   )
-  .action(async (file: string, options: { provider: ProviderId }) => {
-    try {
-      const astContext = summaryToMarkdown(parseFile(file));
-      const diff = getFileDiff(file);
-      const { codeReview, securityAudit, sandboxTest } = await runReviewPipeline({
-        filePath: file,
-        astContext,
-        diff,
-        provider: options.provider,
-      });
+  .option("--output <path>", "write the aggregated report to a Markdown file")
+  .option("--pr <number>", "post the aggregated report as a comment on this PR number")
+  .option("--repo <owner/repo>", "GitHub repo slug for --pr (defaults to the origin remote)")
+  .action(async (file: string, options: ReviewOptions) => {
+    let githubTarget: { owner: string; repo: string; pr: number; token: string } | undefined;
 
-      console.log("\n=== Code Reviewer ===\n");
-      console.log(codeReview);
-      console.log("\n=== Security Auditor ===\n");
-      console.log(securityAudit);
-
-      console.log("\n=== Sandbox Test ===\n");
-      console.log(sandboxTest.code);
-      console.log(`\n--- Sandbox Result (${sandboxTest.result.ok ? "OK" : "FAILED"}) ---`);
-      for (const line of sandboxTest.result.logs) {
-        console.log(`[log] ${line}`);
+    if (options.pr) {
+      const prNumber = Number(options.pr);
+      if (!Number.isInteger(prNumber) || prNumber <= 0) {
+        console.error(`slipstream: --pr must be a positive integer, got "${options.pr}"`);
+        process.exitCode = 1;
+        return;
       }
-      for (const line of sandboxTest.result.errors) {
-        console.error(`[error] ${line}`);
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) {
+        console.error("slipstream: --pr requires a GITHUB_TOKEN environment variable");
+        process.exitCode = 1;
+        return;
+      }
+      const slug = options.repo
+        ? { owner: options.repo.split("/")[0] ?? "", repo: options.repo.split("/")[1] ?? "" }
+        : getRepoSlugFromGit();
+      if (!slug || !slug.owner || !slug.repo) {
+        console.error(
+          "slipstream: could not determine the GitHub repo — pass --repo owner/repo or run inside a repo with a GitHub origin remote",
+        );
+        process.exitCode = 1;
+        return;
+      }
+      githubTarget = { ...slug, pr: prNumber, token };
+    }
+
+    clack.intro("slipstream review");
+
+    try {
+      let astContext = "";
+      let diff = "";
+      let reportMarkdown = "";
+
+      await clack.tasks([
+        {
+          title: "Parse AST",
+          task: () => {
+            astContext = summaryToMarkdown(parseFile(file));
+            return "AST extracted";
+          },
+        },
+        {
+          title: "Compute diff",
+          task: () => {
+            diff = getFileDiff(file);
+            return "Diff ready";
+          },
+        },
+        {
+          title: `Run AI review pipeline (${options.provider})`,
+          task: async (message) => {
+            const result = await runReviewPipeline(
+              { filePath: file, astContext, diff, provider: options.provider },
+              (stage) => message(STAGE_MESSAGES[stage]),
+            );
+            reportMarkdown = buildReportMarkdown({
+              filePath: file,
+              provider: options.provider,
+              result,
+            });
+            return "Review pipeline complete";
+          },
+        },
+      ]);
+
+      if (options.output) {
+        await writeFile(options.output, reportMarkdown, "utf-8");
+        clack.outro(`Report written to ${options.output}`);
+      } else if (githubTarget) {
+        const { url } = await postPrComment({ ...githubTarget, body: reportMarkdown });
+        clack.outro(`Report posted: ${url}`);
+      } else {
+        clack.outro("Review complete");
+        console.log(`\n${reportMarkdown}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`slipstream: review failed: ${message}`);
+      clack.log.error(message);
+      clack.outro("Review failed");
       process.exitCode = 1;
     }
   });

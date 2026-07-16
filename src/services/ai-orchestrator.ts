@@ -19,6 +19,10 @@ Rules:
 - End with \`console.log("PASS")\` if you expect every assertion to hold, or a \`console.log("FAIL: <reason>")\` describing what you expect to fail and why.
 - Keep it short: a happy-path case plus one edge case is enough — this is a smoke test, not an exhaustive suite.`;
 
+export type ReviewStage = "loading-personas" | "code-review" | "security-audit" | "sandbox-test";
+
+export type ReviewProgressCallback = (stage: ReviewStage) => void;
+
 export interface ReviewInput {
   filePath: string;
   astContext: string;
@@ -98,22 +102,28 @@ async function generateSandboxTest(model: LanguageModel, input: ReviewInput): Pr
   return stripCodeFences(text);
 }
 
-export async function runReviewPipeline(input: ReviewInput): Promise<ReviewResult> {
-  console.error(`slipstream: using provider "${input.provider}"`);
-
+export async function runReviewPipeline(
+  input: ReviewInput,
+  onProgress?: ReviewProgressCallback,
+): Promise<ReviewResult> {
+  onProgress?.("loading-personas");
   const model = createModel(input.provider);
   const [codeReviewer, securityAuditor] = await Promise.all([
     loadPersonaPrompt("code-reviewer"),
     loadPersonaPrompt("security-auditor"),
   ]);
 
+  onProgress?.("code-review");
   const codeReview = await runPersona(model, codeReviewer, buildUserPrompt(input));
+
+  onProgress?.("security-audit");
   const securityAudit = await runPersona(
     model,
     securityAuditor,
     buildUserPrompt(input, codeReview),
   );
 
+  onProgress?.("sandbox-test");
   const sandboxTestCode = await generateSandboxTest(model, input);
   const sandboxResult = await runInSandbox(sandboxTestCode);
 
