@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",
+    "@clack/prompts": "1.7.0",
     "ai": "^7.0.29",
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
