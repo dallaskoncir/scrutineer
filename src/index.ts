@@ -16,7 +16,15 @@ program
   .argument("<file>", "path to the TypeScript file to analyze")
   .option("-j, --json", "output raw JSON instead of Markdown")
   .action((file: string, options: { json?: boolean }) => {
-    const summary = parseFile(file);
+    let summary;
+    try {
+      summary = parseFile(file);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`slipstream: failed to parse "${file}": ${message}`);
+      process.exitCode = 1;
+      return;
+    }
     if (options.json) {
       console.log(JSON.stringify(summary, null, 2));
     } else {

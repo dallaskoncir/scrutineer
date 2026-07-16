@@ -19,8 +19,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.0",
-    "ai": "^4.3.9",
+    "@ai-sdk/anthropic": "^4.0.15",
+    "ai": "^7.0.29",
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
     "isolated-vm": "6.1.2",

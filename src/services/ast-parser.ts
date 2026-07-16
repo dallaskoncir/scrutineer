@@ -7,13 +7,6 @@ import type {
   ParameterInfo,
 } from "../types/ast.js";
 
-const project = new Project({
-  skipAddingFilesFromTsConfig: true,
-  compilerOptions: {
-    allowJs: true,
-  },
-});
-
 function extractImports(sourceFile: SourceFile): ImportInfo[] {
   return sourceFile.getImportDeclarations().map((decl) => ({
     moduleSpecifier: decl.getModuleSpecifierValue(),
@@ -85,6 +78,12 @@ function extractInterfaces(sourceFile: SourceFile): InterfaceInfo[] {
 }
 
 export function parseFile(filePath: string): FileAstSummary {
+  const project = new Project({
+    skipAddingFilesFromTsConfig: true,
+    compilerOptions: {
+      allowJs: true,
+    },
+  });
   const sourceFile = project.addSourceFileAtPath(filePath);
 
   return {
