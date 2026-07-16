@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { generateText, type LanguageModel } from "ai";
 import { loadPersonaPrompt, type PersonaPrompt } from "./prompt-loader.js";
 import { createModel, type ProviderId } from "../utils/model-factory.js";
 
@@ -52,7 +52,7 @@ function buildUserPrompt(input: ReviewInput, priorFindings?: string): string {
 }
 
 async function runPersona(
-  model: ReturnType<typeof createModel>,
+  model: LanguageModel,
   persona: PersonaPrompt,
   userPrompt: string,
 ): Promise<string> {
