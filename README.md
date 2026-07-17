@@ -35,6 +35,8 @@ Or run it straight from the registry without installing:
 npx @flowlaps/scrutineer review ./src/index.ts
 ```
 
+(The commands below use `scrutineer` for brevity, assuming a global install. If you're using `npx @flowlaps/scrutineer` instead, swap that in wherever you see `scrutineer`.)
+
 To work on the CLI itself, build from source instead:
 
 ```bash
@@ -105,7 +107,5 @@ You can also run just the AST extraction on its own, without calling any model:
 scrutineer parse ./src/index.ts
 scrutineer parse ./src/index.ts --json
 ```
-
-(If you're using `npx @flowlaps/scrutineer` instead of a global install, swap `scrutineer` for `npx @flowlaps/scrutineer` in the commands above.)
 
 > Scrutineer reviews one file at a time — for a whole MR, run it once per changed file (pair with `--pr` to post each file's report as a separate comment on the same PR). There's no recursive directory scan or single-command whole-diff review yet.
