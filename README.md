@@ -1,5 +1,7 @@
 # scrutineer
 
+[![npm version](https://img.shields.io/npm/v/@flowlaps/scrutineer)](https://www.npmjs.com/package/@flowlaps/scrutineer)
+
 Scrutineer is a CLI that reviews the TypeScript files in your merge/pull request before you merge, one file at a time. For each file, it extracts real AST context, hands that context to a code-reviewer and then a security-auditor agent in sequence, and sandboxes an AI-generated smoke test so you get a signal on behavior, not just prose — and it can post the resulting report straight back to the PR.
 
 ## Architecture Highlights
