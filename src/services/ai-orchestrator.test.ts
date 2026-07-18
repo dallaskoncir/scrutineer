@@ -111,6 +111,7 @@ mock.module("ai", {
 mock.module("../utils/model-factory.js", {
   namedExports: {
     createModel: () => ({ modelId: "mock-model" }),
+    getModelId: (model: { modelId: string }) => model.modelId,
   },
 });
 

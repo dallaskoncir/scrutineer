@@ -8,7 +8,7 @@ import {
   type TextPart,
 } from "ai";
 import { loadPersonaPrompt, type PersonaPrompt } from "./prompt-loader.js";
-import { createModel, type ProviderId } from "../utils/model-factory.js";
+import { createModel, getModelId, type ProviderId } from "../utils/model-factory.js";
 import { runInSandbox, type SandboxResult } from "./sandbox.js";
 
 // Bounds how much file content and model output a single review can consume, so a
@@ -126,7 +126,7 @@ function friendlyModelError(error: unknown, provider: ProviderId, model: Languag
   if (provider !== "ollama" || !APICallError.isInstance(error) || error.statusCode !== 404) {
     return error;
   }
-  const modelId = (model as unknown as { modelId?: string }).modelId ?? "unknown";
+  const modelId = getModelId(model);
   return new Error(
     `Model "${modelId}" not found on the Ollama instance. Run \`ollama pull ${modelId}\` or set ` +
       "SCRUTINEER_MODEL_OLLAMA to a model you've already pulled.",

@@ -29,3 +29,9 @@ export function createModel(provider: ProviderId): LanguageModel {
       return ollama(modelId);
   }
 }
+
+// LanguageModel is a union that also allows a bare provider:model-id string, so
+// `.modelId` isn't accessible without narrowing that case out first.
+export function getModelId(model: LanguageModel): string {
+  return typeof model === "string" ? model : model.modelId;
+}
