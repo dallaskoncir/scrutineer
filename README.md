@@ -92,3 +92,22 @@ pnpm approve-builds
 ```
 
 and allow `isolated-vm` to compile. Without this step, the sandbox will fail to load.
+
+## Development
+
+To work on the CLI itself, build from source:
+
+```bash
+git clone https://github.com/dallaskoncir/scrutineer.git
+cd scrutineer
+npm install
+npm run build
+```
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Run the CLI from source with `tsx` (no build step) |
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm start` | Run the compiled CLI from `dist/` |
+| `npm run typecheck` | Type-check without emitting |
+| `npm test` | Run the test suite (`node --test`) |
