@@ -51,7 +51,7 @@ Please create a new branch for Phase 5 and execute the following steps:
 
 3. **Establish the PR Template (`.github/pull_request_template.md`):**
    - Create a standard PR template matching our branch-per-step workflow.
-   - Include sections for: Summary, Why, Scope, Files Changed, and Checks Run (specifically including a checkbox for "Ran scrutineer analysis on diff").
+   - Include sections for: Summary, Why, Scope, Files Changed, and Checks Run — with checkboxes for `npm run typecheck`, `npm run build`, `npm test`, and manual verification.
 
 4. **Verify and Wrap Up:**
    - Ensure all markdown files are properly formatted and easy to read.
@@ -88,6 +88,12 @@ Use Anthropic prompt caching (`@ai-sdk/anthropic`'s `providerOptions.anthropic.c
 4. Capture and log token usage (`generateText`'s returned `usage`) per call so the caching effect is visible and verifiable, not just assumed.
 5. Verify `npm run typecheck`, `npm run build`, and `npm test` pass. Confirm the AST/diff caching by comparing input-token cost between the first and later calls within one `review` run, and confirm the persona caching by running `scrutineer review` twice in a row and comparing the second run's cost to the first's.
 6. Push the branch and open a PR per the standard workflow.
+
+## Agent Skills Policy
+Use agent skills library selectively, keeping the context window focused:
+- **Match the Skill to the Task**: Pick whichever installed skill best fits the work at hand rather than following a fixed branch-to-skill mapping.
+- **Default to Installed Skills**: Before attempting to write custom scripts, scaffolding logic, or complex manual CLI commands, you MUST check for and utilize the installed skills from the Addy Osmani skill library.
+- **Do Not Reinvent the Wheel**: If a task (like analyzing a repo, scaffolding a component, or managing git operations) can be accomplished using an existing installed skill, you are strictly required to invoke that skill rather than doing the work from scratch.
 
 ## Code Review Workflow
 - **Strict Role Separation**: You act as my co-author (Claude) for writing code, committing, and opening PRs. However, the GitHub account `flowlaps-ai-reviewer` is strictly used as an independent reviewer.
