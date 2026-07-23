@@ -119,12 +119,8 @@ Allow users to specify the exact foundation model they want to use via the CLI, 
 
 1. Create a new branch for Phase 11.
 2. Add a `-m, --model <name>` flag to the `commander` configuration.
-3. Implement intelligent defaults based on the active `--provider`. If the user omits the `--model` flag, fallback to:
-   - `anthropic` -> `claude-3-5-sonnet-latest`
-   - `openai` -> `gpt-4o`
-   - `google` -> `gemini-1.5-pro`
-   - `ollama` -> `qwen2.5-coder`
-4. Pass the resolved model string into the Model Factory.
+3. If the user omits the `--model` flag, fall back to the provider's existing default — the current `DEFAULT_MODEL_ID` map in `src/utils/model-factory.ts` (and, for `ollama`, its existing auto-detection logic). No change to today's defaults; `--model` is purely an additive override.
+4. Pass the resolved model string into the Model Factory, taking precedence over the existing `SCRUTINEER_MODEL_*` env var convention when both are set.
 5. Ensure the CLI prints which provider and model are currently being used when starting the review, so the user has immediate feedback.
 6. Document the `--model` flag in the README.
 7. Verify `npm run typecheck`, `npm run build`, and `npm test` pass.
