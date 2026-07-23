@@ -50,16 +50,25 @@ test("scrutineer review --help documents -m, --model", () => {
   assert.match(output, /-m, --model <name>/);
 });
 
-function runReview(args: string[]): { status: number | null; stderr: string } {
+function runReview(
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
+): { status: number | null; stdout: string; stderr: string; timedOut: boolean } {
   try {
-    execFileSync(process.execPath, ["--import", "tsx", "src/index.ts", "review", ...args], {
+    const stdout = execFileSync(process.execPath, ["--import", "tsx", "src/index.ts", "review", ...args], {
       cwd: repoRoot,
       encoding: "utf-8",
+      env: { ...process.env, ...options.env },
+      timeout: options.timeoutMs,
     });
-    return { status: 0, stderr: "" };
+    return { status: 0, stdout, stderr: "", timedOut: false };
   } catch (error) {
-    const e = error as { status: number | null; stderr: string };
-    return { status: e.status, stderr: e.stderr };
+    const e = error as { status: number | null; stdout: string; stderr: string; signal?: string | null };
+    // execFileSync's `timeout` option kills the child (default signal SIGTERM) and
+    // throws instead of returning a normal exit code, so a timed-out run must be
+    // told apart from a real, prompt failure — otherwise a regression of the hang
+    // this test guards against would just look like "no assertions ran yet".
+    return { status: e.status, stdout: e.stdout, stderr: e.stderr, timedOut: e.signal === "SIGTERM" };
   }
 }
 
@@ -86,4 +95,21 @@ test("scrutineer review --diff <target starting with '-'> is rejected before it 
   const { status, stderr } = runReview(["--diff", "--output=/tmp/scrutineer-should-not-exist.txt"]);
   assert.equal(status, 1);
   assert.match(stderr, /not a valid git ref/);
+});
+
+test("scrutineer review exits promptly instead of hanging when the review pipeline itself fails (GH #28)", () => {
+  // Points at a closed local port so the failure is a real async rejection from
+  // inside the AI SDK's generateText call (not an early, pre-pipeline validation
+  // error), fully offline and near-instant — this is what actually exercises the
+  // bug: clack's `tasks()` helper leaks its spinner's setInterval when a task
+  // rejects, which previously kept the process alive indefinitely after this
+  // exact kind of failure. A bounded execFileSync timeout means a regression
+  // fails this test instead of hanging the whole suite.
+  const { status, stdout, timedOut } = runReview(
+    ["src/services/skill-router.ts", "--provider", "ollama"],
+    { env: { OLLAMA_HOST: "http://127.0.0.1:1" }, timeoutMs: 30_000 },
+  );
+  assert.equal(timedOut, false, "process should exit on its own instead of being killed by the test timeout");
+  assert.equal(status, 1);
+  assert.match(stdout, /Review failed/);
 });

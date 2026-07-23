@@ -235,7 +235,17 @@ program
       const message = error instanceof Error ? error.message : String(error);
       clack.log.error(message);
       clack.outro("Review failed");
+      // clack's `tasks()` helper only clears its spinner's setInterval when the
+      // task resolves — a task that throws (e.g. a failed review pipeline call)
+      // leaves that interval running forever, which keeps the process alive
+      // indefinitely instead of exiting on its own. process.exitCode alone
+      // relies on the event loop draining naturally, so force the exit here.
+      // Wait for the error output above to finish writing first: process.exit()
+      // can truncate a stream's still-queued writes when stdout/stderr are piped
+      // (e.g. captured by CI), which would silently swallow the very message this
+      // path exists to show.
       process.exitCode = 1;
+      process.stdout.write("", () => process.stderr.write("", () => process.exit(1)));
     }
   });
 
