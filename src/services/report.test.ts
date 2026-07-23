@@ -19,6 +19,7 @@ test("includes file, provider, and both review sections", () => {
   const markdown = buildReportMarkdown({
     filePath: "src/index.ts",
     provider: "anthropic",
+    model: "claude-sonnet-5",
     result: fakeResult(),
     generatedAt: new Date("2026-01-01T00:00:00.000Z"),
   });
@@ -26,6 +27,7 @@ test("includes file, provider, and both review sections", () => {
   assert.match(markdown, /# Scrutineer Review Report/);
   assert.match(markdown, /\*\*File:\*\* `src\/index\.ts`/);
   assert.match(markdown, /\*\*Provider:\*\* anthropic/);
+  assert.match(markdown, /\*\*Model:\*\* claude-sonnet-5/);
   assert.match(markdown, /\*\*Generated:\*\* 2026-01-01T00:00:00\.000Z/);
   assert.match(markdown, /## Code Review/);
   assert.match(markdown, /Looks fine\./);
@@ -37,6 +39,7 @@ test("reports PASS and omits Errors section when the sandbox succeeds", () => {
   const markdown = buildReportMarkdown({
     filePath: "f.ts",
     provider: "ollama",
+    model: "phi4",
     result: fakeResult(),
   });
 
@@ -49,6 +52,7 @@ test("reports FAILED and includes an Errors section when the sandbox fails", () 
   const markdown = buildReportMarkdown({
     filePath: "f.ts",
     provider: "anthropic",
+    model: "claude-sonnet-5",
     result: fakeResult({
       sandboxTest: {
         code: "throw new Error('boom');",
@@ -73,6 +77,7 @@ test("a generated test containing its own fence doesn't break the report", () =>
   const markdown = buildReportMarkdown({
     filePath: "f.ts",
     provider: "anthropic",
+    model: "claude-sonnet-5",
     result: fakeResult({ sandboxTest: { code: trickyCode, result: { ok: true, logs: [], errors: [] } } }),
   });
 

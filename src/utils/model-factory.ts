@@ -123,8 +123,22 @@ async function detectOllamaModelId(): Promise<string> {
   return DEFAULT_MODEL_ID.ollama;
 }
 
-export async function createModel(provider: ProviderId): Promise<LanguageModel> {
-  const override = process.env[MODEL_ENV_VAR[provider]];
+// A blank/whitespace-only value (from either source) is treated as "not set" —
+// `??` alone doesn't catch "", so an empty --model or SCRUTINEER_MODEL_* would
+// otherwise pass a blank string straight to the provider SDK and surface as a
+// confusing vendor API error instead of just falling back to the default.
+function normalizeOverride(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+// `modelOverride` (the CLI's -m/--model flag) takes precedence over the
+// SCRUTINEER_MODEL_* env var when both are set, per the existing override
+// convention — the env var stays available as a way to pin a model without
+// having to pass a flag on every invocation.
+export async function createModel(provider: ProviderId, modelOverride?: string): Promise<LanguageModel> {
+  const override =
+    normalizeOverride(modelOverride) ?? normalizeOverride(process.env[MODEL_ENV_VAR[provider]]);
 
   switch (provider) {
     case "anthropic":

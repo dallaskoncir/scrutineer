@@ -40,6 +40,16 @@ test("scrutineer review --help documents --diff", () => {
   assert.match(output, /--diff <target>/);
 });
 
+test("scrutineer review --help documents -m, --model", () => {
+  const output = execFileSync(
+    process.execPath,
+    ["--import", "tsx", "src/index.ts", "review", "--help"],
+    { cwd: repoRoot, encoding: "utf-8" },
+  );
+
+  assert.match(output, /-m, --model <name>/);
+});
+
 function runReview(args: string[]): { status: number | null; stderr: string } {
   try {
     execFileSync(process.execPath, ["--import", "tsx", "src/index.ts", "review", ...args], {

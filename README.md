@@ -48,6 +48,14 @@ scrutineer review ./src/index.ts --pr 42               # post the report as a PR
 scrutineer parse ./src/index.ts --json                 # just the AST extraction, no model call
 ```
 
+Pick a specific model instead of the provider's default, e.g. to trade cost for reasoning quality:
+
+```bash
+scrutineer review ./src/index.ts --provider anthropic --model claude-opus-4-8
+```
+
+`--model` (`-m`) takes precedence over `SCRUTINEER_MODEL_*` when both are set; omit it to keep today's per-provider default (or, for `--provider ollama`, its auto-detection of a locally running model).
+
 Review every changed file against a git ref in one batch, instead of naming a file — useful in a pre-push hook or CI:
 
 ```bash
