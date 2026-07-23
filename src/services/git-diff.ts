@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { scrubSecrets } from "./secret-scrubber.js";
-import { isDynamicSkillTrigger } from "./skill-router.js";
+import { isDynamicSkillTrigger, isLockfileFile } from "./skill-router.js";
 
 const CHANGED_FILE_EXTENSIONS = [".ts", ".tsx"];
 
@@ -59,10 +59,38 @@ export function getChangedFiles(target: string, cwd?: string): string[] {
     );
 }
 
+// Lockfiles are generated and often huge — a --diff batch that includes one
+// concatenates its full diff body into the same string as every other changed
+// file, ahead of ai-orchestrator.ts's fixed MAX_SECTION_CHARS truncation, which
+// can push the actual .ts/.tsx changes in the batch out of what the model ever
+// sees (issue #31). Lockfile content isn't meant to be reviewed line-by-line
+// anyway, so their diff body is replaced with a `--stat` summary (still enough
+// to see the change happened and roughly how large it was) instead of being
+// dropped outright — dropping it silently would reintroduce the "no lockfile
+// update" false positive issue #27 fixed, since a lockfile with zero visible
+// change in the diff looks identical to one that never changed at all.
 export function getDiffAgainstTarget(target: string, filePaths: string[], cwd?: string): string {
   assertSafeRefTarget(target);
-  const diff = runGitDiff(["diff", "--no-color", `${target}...HEAD`, "--", ...filePaths], cwd);
-  return withSecretsScrubbed(diff);
+  const lockfiles = filePaths.filter(isLockfileFile);
+  const contentFiles = filePaths.filter((f) => !isLockfileFile(f));
+
+  const parts: string[] = [];
+  if (contentFiles.length > 0) {
+    parts.push(runGitDiff(["diff", "--no-color", `${target}...HEAD`, "--", ...contentFiles], cwd));
+  }
+  if (lockfiles.length > 0) {
+    const stat = runGitDiff(
+      ["diff", "--no-color", "--stat", `${target}...HEAD`, "--", ...lockfiles],
+      cwd,
+    );
+    parts.push(
+      "# Lockfile changes (content omitted from review — generated files; only the " +
+        "fact that they changed and how much is shown, so a paired package.json " +
+        "update isn't flagged as missing):\n" +
+        stat,
+    );
+  }
+  return withSecretsScrubbed(parts.join("\n\n"));
 }
 
 export function getFileDiff(filePath: string): string {
