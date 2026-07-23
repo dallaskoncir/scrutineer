@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildDynamicSkillInstructions } from "./skill-router.js";
+import { buildDynamicSkillInstructions, isLockfileFile } from "./skill-router.js";
 
 test("returns empty instructions and no triggered categories when nothing matches", () => {
   const result = buildDynamicSkillInstructions(["src/services/ast-parser.ts"]);
@@ -59,6 +59,24 @@ test("combines instructions across categories when a batch touches multiple file
   assert.match(result.codeReviewerAdditions, /Type Wizard/);
   assert.match(result.securityAuditorAdditions, /Backend Security Auditor/);
   assert.match(result.securityAuditorAdditions, /Dependency & Environment Auditor/);
+});
+
+test("isLockfileFile recognizes pnpm-lock.yaml, package-lock.json, and yarn.lock, including nested paths and case-insensitively", () => {
+  for (const file of [
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "yarn.lock",
+    "packages/app/pnpm-lock.yaml",
+    "YARN.LOCK",
+  ]) {
+    assert.equal(isLockfileFile(file), true, `expected "${file}" to be recognized as a lockfile`);
+  }
+});
+
+test("isLockfileFile rejects package.json and unrelated files", () => {
+  for (const file of ["package.json", "src/services/lock-manager.ts", "unlock.ts"]) {
+    assert.equal(isLockfileFile(file), false, `expected "${file}" not to be recognized as a lockfile`);
+  }
 });
 
 test("does not match unrelated files with similar substrings", () => {

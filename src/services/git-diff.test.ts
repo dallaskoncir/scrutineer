@@ -100,6 +100,36 @@ test("getDiffAgainstTarget returns diff content scoped to the given files", (t) 
   assert.doesNotMatch(diff, /widget\.tsx/);
 });
 
+test("getDiffAgainstTarget omits lockfile diff bodies (replaced with a --stat summary) so they can't crowd out real code changes", (t) => {
+  const dir = setupRepo(t);
+  const diff = getDiffAgainstTarget(
+    "main",
+    ["base.ts", "pnpm-lock.yaml", "package-lock.json", "yarn.lock"],
+    dir,
+  );
+
+  // The real code diff is untouched.
+  assert.match(diff, /base\.ts/);
+  assert.match(diff, /-export const base = 1;/);
+  assert.match(diff, /\+export const base = 2;/);
+
+  // Lockfiles are named (so the model still knows they changed) but their line
+  // content never appears — proving the body was omitted, not merely truncated.
+  assert.match(diff, /pnpm-lock\.yaml/);
+  assert.match(diff, /package-lock\.json/);
+  assert.match(diff, /yarn\.lock/);
+  assert.doesNotMatch(diff, /lockfileVersion/);
+  assert.doesNotMatch(diff, /yarn lockfile v1/);
+});
+
+test("getDiffAgainstTarget returns just the lockfile stat summary when only lockfiles changed", (t) => {
+  const dir = setupRepo(t);
+  const diff = getDiffAgainstTarget("main", ["pnpm-lock.yaml", "yarn.lock"], dir);
+  assert.match(diff, /pnpm-lock\.yaml/);
+  assert.match(diff, /yarn\.lock/);
+  assert.doesNotMatch(diff, /lockfileVersion/);
+});
+
 test("getDiffAgainstTarget scrubs values that look like secrets", (t) => {
   const dir = setupRepo(t);
   const secret = `sk-${"a".repeat(24)}`;

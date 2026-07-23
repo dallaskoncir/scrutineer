@@ -5,12 +5,20 @@ export type SkillCategory = "frontend" | "backend" | "config";
 // patterns are case-sensitive by convention.
 const FRONTEND_PATTERNS = [/(^|\/)page\.tsx$/i, /(^|\/)layout\.tsx$/i, /(^|\/)components\//i];
 const BACKEND_PATTERNS = [/(^|\/)route\.ts$/i, /(^|\/)schema\.ts$/i, /(^|\/)prisma\//i, /\.sql$/i];
-const CONFIG_PATTERNS = [
-  /(^|\/)package\.json$/i,
-  /(^|\/)next\.config\.(ts|js|mjs)$/i,
+// Split out from the rest of CONFIG_PATTERNS (which it's still folded into below)
+// because lockfiles need different handling downstream: getDiffAgainstTarget()
+// (git-diff.ts) uses isLockfileFile() to omit their diff *body* from the model
+// payload — they're generated, often huge, and not meant to be read line-by-line,
+// unlike a hand-authored package.json or next.config.* (see issue #31).
+const LOCKFILE_PATTERNS = [
   /(^|\/)pnpm-lock\.yaml$/i,
   /(^|\/)package-lock\.json$/i,
   /(^|\/)yarn\.lock$/i,
+];
+const CONFIG_PATTERNS = [
+  /(^|\/)package\.json$/i,
+  /(^|\/)next\.config\.(ts|js|mjs)$/i,
+  ...LOCKFILE_PATTERNS,
 ];
 
 // `.sql` files aren't `.ts`/`.tsx`, so getChangedFiles() (git-diff.ts) drops them
@@ -37,6 +45,12 @@ function matchesAny(patterns: RegExp[], filePath: string): boolean {
 // flag a false-positive "no lockfile update" finding (issue #27).
 export function isDynamicSkillTrigger(filePath: string): boolean {
   return matchesAny(CONFIG_PATTERNS, filePath) || matchesAny([SQL_PATTERN], filePath);
+}
+
+// Used by getDiffAgainstTarget() (git-diff.ts) to decide whether a changed file's
+// diff body belongs in the model payload at all, independent of skill routing.
+export function isLockfileFile(filePath: string): boolean {
+  return matchesAny(LOCKFILE_PATTERNS, filePath);
 }
 
 const REACT_ARCHITECTURE_AND_PERFORMANCE = `## Dynamic Skill: React Architecture & Performance Auditor
