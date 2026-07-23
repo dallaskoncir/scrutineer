@@ -113,6 +113,52 @@ test("createModel(ollama) falls back to /api/tags when nothing is running", asyn
   assert.equal(modelId(model), "llama3.1:8b");
 });
 
+test("createModel(ollama) skips an embedding-only model from /api/ps in favor of a chat-capable one", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_OLLAMA", undefined);
+  withMockFetch(t, (async (url: string) => {
+    assert.match(url, /\/api\/ps$/);
+    return {
+      ok: true,
+      json: async () => ({
+        models: [
+          { model: "nomic-embed-text:latest", capabilities: ["embedding"] },
+          { model: "phi4:latest", capabilities: ["completion"] },
+        ],
+      }),
+    } as Response;
+  }) as typeof fetch);
+
+  const model = await createModel("ollama");
+  assert.equal(modelId(model), "phi4:latest");
+});
+
+test("createModel(ollama) falls back to the hardcoded default when every running/pulled model is embedding-only", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_OLLAMA", undefined);
+  withMockFetch(t, (async (url: string) => {
+    return {
+      ok: true,
+      json: async () => ({ models: [{ model: "nomic-embed-text:latest", capabilities: ["embedding"] }] }),
+    } as Response;
+  }) as typeof fetch);
+
+  const model = await createModel("ollama");
+  assert.equal(modelId(model), "phi4");
+});
+
+test("createModel(ollama) treats a model with no reported capabilities as usable, for older Ollama versions", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_OLLAMA", undefined);
+  withMockFetch(t, (async (url: string) => {
+    assert.match(url, /\/api\/ps$/);
+    return {
+      ok: true,
+      json: async () => ({ models: [{ model: "phi4:14b" }] }),
+    } as Response;
+  }) as typeof fetch);
+
+  const model = await createModel("ollama");
+  assert.equal(modelId(model), "phi4:14b");
+});
+
 test("createModel(ollama) falls back to the hardcoded default when Ollama is unreachable", async (t) => {
   withEnv(t, "SCRUTINEER_MODEL_OLLAMA", undefined);
   withMockFetch(t, (async () => {

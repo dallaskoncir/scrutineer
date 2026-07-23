@@ -46,6 +46,7 @@ function resolveOllamaBaseUrl(): string {
 interface OllamaModelSummary {
   model?: string;
   name?: string;
+  capabilities?: string[];
 }
 
 const OLLAMA_DETECTION_TIMEOUT_MS = 2_000;
@@ -65,19 +66,31 @@ async function fetchOllamaModels(path: string): Promise<OllamaModelSummary[]> {
   }
 }
 
+// Ollama (0.5+) reports a `capabilities` array per model — chat-capable models
+// include "completion", embedding-only models (e.g. nomic-embed-text) don't.
+// Picking an embedding model here sends it a chat request it can't serve, which
+// comes back as a bare "Bad Request" indistinguishable from any other failure
+// until you inspect the response body — see GH #22, reproduced live against an
+// instance where an embedding model happened to be the most recently loaded one.
+// Older Ollama versions don't report `capabilities` at all, so its absence is
+// treated as "unknown, assume usable" rather than excluded.
+function supportsChat(model: OllamaModelSummary): boolean {
+  return model.capabilities === undefined || model.capabilities.includes("completion");
+}
+
 // No explicit SCRUTINEER_MODEL_OLLAMA override: use whatever model the user actually
 // has loaded (or, failing that, pulled) in their local Ollama instance instead of a
 // hardcoded default that may not exist on their machine. Prefers a currently-running
 // model (/api/ps) over merely-pulled ones (/api/tags) since that's what's already
 // warm and avoids a cold-load delay on the first request.
 async function detectOllamaModelId(): Promise<string> {
-  const running = await fetchOllamaModels("/api/ps");
+  const running = (await fetchOllamaModels("/api/ps")).filter(supportsChat);
   const loaded = running[0]?.model ?? running[0]?.name;
   if (loaded) {
     return loaded;
   }
 
-  const pulled = await fetchOllamaModels("/api/tags");
+  const pulled = (await fetchOllamaModels("/api/tags")).filter(supportsChat);
   const available = pulled[0]?.model ?? pulled[0]?.name;
   if (available) {
     return available;
