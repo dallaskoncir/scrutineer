@@ -7,6 +7,7 @@ type Kind = "code-reviewer" | "security-auditor" | "test-generator";
 interface RecordedCall {
   kind: Kind;
   startedAt: number;
+  systemText: string;
   userText: string;
   hasSystemCacheControl: boolean;
   hasUserCacheControl: boolean;
@@ -52,8 +53,11 @@ function resetState(): void {
 
 function classify(system: GenerateTextOpts["system"]): Kind {
   const text = typeof system === "string" ? system : system.content;
-  if (text === "CODE_REVIEWER_SYSTEM") return "code-reviewer";
-  if (text === "SECURITY_AUDITOR_SYSTEM") return "security-auditor";
+  // Dynamic skill routing (skill-router.ts) appends extra text after the base
+  // persona prompt when the diff matches a triggered category, so this can no
+  // longer be an exact match — only a prefix check survives that.
+  if (text.startsWith("CODE_REVIEWER_SYSTEM")) return "code-reviewer";
+  if (text.startsWith("SECURITY_AUDITOR_SYSTEM")) return "security-auditor";
   return "test-generator";
 }
 
@@ -74,6 +78,7 @@ mock.module("ai", {
       calls.push({
         kind,
         startedAt: Date.now(),
+        systemText: typeof opts.system === "string" ? opts.system : opts.system.content,
         userText: opts.messages[0]?.content.map((part) => part.text).join("") ?? "",
         hasSystemCacheControl: typeof opts.system !== "string" && opts.system.providerOptions !== undefined,
         hasUserCacheControl: opts.messages[0]?.content[0]?.providerOptions !== undefined,
@@ -152,6 +157,7 @@ const baseInput = {
   diff: "diff",
   provider: "anthropic" as const,
   model: { modelId: "mock-model" } as unknown as import("ai").LanguageModel,
+  changedFiles: ["example.ts"],
 };
 
 test("returns the codeReview/securityAudit/sandboxTest shape assembled from all three passes", async () => {
@@ -375,4 +381,44 @@ test("warns on stderr when the AST context or diff is truncated, instead of sile
     `expected exactly one truncation warning (the AST/diff block is built once per run and reused ` +
       `across all three model calls), got: ${JSON.stringify(messages)}`,
   );
+});
+
+test("injects React/Performance instructions into the code-reviewer prompt for frontend files, and nothing into security-auditor", async () => {
+  resetState();
+
+  await runReviewPipeline({ ...baseInput, changedFiles: ["src/app/page.tsx"] });
+
+  const byKind = Object.fromEntries(calls.map((c) => [c.kind, c]));
+  assert.match(byKind["code-reviewer"]!.systemText, /Dynamic Skill: React Architecture & Performance Auditor/);
+  assert.doesNotMatch(byKind["security-auditor"]!.systemText, /Dynamic Skill/);
+});
+
+test("injects Type Wizard into code-reviewer and Backend Security Auditor into security-auditor for backend/data files", async () => {
+  resetState();
+
+  await runReviewPipeline({ ...baseInput, changedFiles: ["src/app/api/route.ts"] });
+
+  const byKind = Object.fromEntries(calls.map((c) => [c.kind, c]));
+  assert.match(byKind["code-reviewer"]!.systemText, /Dynamic Skill: Type Wizard/);
+  assert.match(byKind["security-auditor"]!.systemText, /Dynamic Skill: Backend Security Auditor/);
+});
+
+test("injects Dependency & Environment Auditor into security-auditor for config files, and nothing into code-reviewer", async () => {
+  resetState();
+
+  await runReviewPipeline({ ...baseInput, changedFiles: ["package.json"] });
+
+  const byKind = Object.fromEntries(calls.map((c) => [c.kind, c]));
+  assert.doesNotMatch(byKind["code-reviewer"]!.systemText, /Dynamic Skill/);
+  assert.match(byKind["security-auditor"]!.systemText, /Dynamic Skill: Dependency & Environment Auditor/);
+});
+
+test("injects nothing when no changed file matches a dynamic skill category", async () => {
+  resetState();
+
+  await runReviewPipeline({ ...baseInput, changedFiles: ["src/services/example.ts"] });
+
+  const byKind = Object.fromEntries(calls.map((c) => [c.kind, c]));
+  assert.doesNotMatch(byKind["code-reviewer"]!.systemText, /Dynamic Skill/);
+  assert.doesNotMatch(byKind["security-auditor"]!.systemText, /Dynamic Skill/);
 });

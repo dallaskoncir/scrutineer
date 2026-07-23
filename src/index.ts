@@ -136,6 +136,7 @@ program
       let diff = "";
       let reportMarkdown = "";
       let label: string;
+      let changedFiles: string[];
 
       if (options.diff) {
         let files: string[];
@@ -152,6 +153,7 @@ program
         }
 
         label = `${files.length} file(s) changed vs ${options.diff}`;
+        changedFiles = files;
         const diffTarget = options.diff;
 
         await clack.tasks([
@@ -172,6 +174,7 @@ program
         ]);
       } else {
         label = file as string;
+        changedFiles = [label];
 
         await clack.tasks([
           {
@@ -196,7 +199,7 @@ program
           title: `Run AI review pipeline (${options.provider} / ${getModelId(model)})`,
           task: async (message) => {
             const result = await runReviewPipeline(
-              { filePath: label, astContext, diff, provider: options.provider, model },
+              { filePath: label, astContext, diff, provider: options.provider, model, changedFiles },
               (stage) => message(STAGE_MESSAGES[stage]),
             );
             reportMarkdown = buildReportMarkdown({
