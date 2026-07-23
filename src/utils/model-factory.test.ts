@@ -96,6 +96,35 @@ test("createModel(anthropic) uses modelOverride when no env var is set", async (
   assert.equal(modelId(model), "claude-haiku-4-5-20251001");
 });
 
+test("createModel(anthropic) falls back to SCRUTINEER_MODEL_ANTHROPIC when modelOverride is blank/whitespace", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_ANTHROPIC", "claude-opus-4-8");
+  const model = await createModel("anthropic", "   ");
+  assert.equal(modelId(model), "claude-opus-4-8");
+});
+
+test("createModel(anthropic) falls back to the default when modelOverride and SCRUTINEER_MODEL_ANTHROPIC are both blank", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_ANTHROPIC", "  ");
+  const model = await createModel("anthropic", "");
+  assert.equal(modelId(model), "claude-sonnet-5");
+});
+
+test("createModel(ollama) falls back to auto-detection when modelOverride is blank", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_OLLAMA", undefined);
+  withMockFetch(t, (async (url: string) => {
+    if (url.endsWith("/api/ps")) {
+      return { ok: true, json: async () => ({ models: [{ model: "phi4:14b" }] }) } as Response;
+    }
+    assert.match(url, /\/api\/tags$/);
+    return {
+      ok: true,
+      json: async () => ({ models: [{ model: "phi4:14b", capabilities: ["completion"] }] }),
+    } as Response;
+  }) as typeof fetch);
+
+  const model = await createModel("ollama", "  ");
+  assert.equal(modelId(model), "phi4:14b");
+});
+
 test("createModel(ollama) respects SCRUTINEER_MODEL_OLLAMA without querying Ollama", async (t) => {
   withEnv(t, "SCRUTINEER_MODEL_OLLAMA", "phi4");
   withMockFetch(t, (async () => {
