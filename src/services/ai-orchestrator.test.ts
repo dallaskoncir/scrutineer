@@ -14,6 +14,7 @@ interface RecordedCall {
   hasUserCacheControl: boolean;
   hasAbortSignal: boolean;
   timeoutMs: number | undefined;
+  maxOutputTokens: number | undefined;
 }
 
 interface SystemPart {
@@ -26,6 +27,7 @@ interface GenerateTextOpts {
   messages: Array<{ content: Array<{ text: string; providerOptions?: unknown }> }>;
   abortSignal?: AbortSignal;
   timeout?: number;
+  maxOutputTokens?: number;
 }
 
 // The persona's base prompt and the dynamic skill additions (skill-router.ts)
@@ -103,6 +105,7 @@ mock.module("ai", {
         hasUserCacheControl: opts.messages[0]?.content[0]?.providerOptions !== undefined,
         hasAbortSignal: opts.abortSignal instanceof AbortSignal,
         timeoutMs: opts.timeout,
+        maxOutputTokens: opts.maxOutputTokens,
       });
 
       if (hangUntilAborted[kind]) {
@@ -171,7 +174,7 @@ mock.module("./sandbox.js", {
   },
 });
 
-const { runReviewPipeline } = await import("./ai-orchestrator.js");
+const { runReviewPipeline, resolveMaxOutputTokens } = await import("./ai-orchestrator.js");
 
 const baseInput = {
   filePath: "example.ts",
@@ -514,18 +517,71 @@ test("keeps the persona's base prompt as its own cache breakpoint, separate from
   await runReviewPipeline({ ...baseInput, changedFiles: ["src/app/page.tsx"] });
 
   // The base persona prompt (part 0) is cache-controlled independently of
-  // whatever dynamic additions get appended; the additions themselves (part 1)
-  // vary per diff, so they're sent as plain, uncached text instead of paying a
-  // cache-write cost for content unlikely to be reused across runs.
+  // whatever dynamic additions get appended (part 1, uncached — those vary per
+  // diff, so caching them would pay a cache-write cost for content unlikely to
+  // be reused across runs); the fixed output-efficiency instructions (part 2)
+  // are identical on every call, so they get their own cache breakpoint too.
   const codeReviewer = calls.find((c) => c.kind === "code-reviewer")!;
-  assert.deepEqual(codeReviewer.systemPartCacheControl, [true, false]);
+  assert.deepEqual(codeReviewer.systemPartCacheControl, [true, false, true]);
 });
 
-test("keeps the persona system prompt as a single cache-controlled part when no dynamic skill category is triggered", async () => {
+test("keeps the persona system prompt and the fixed output-efficiency instructions as two cache-controlled parts when no dynamic skill category is triggered", async () => {
   resetState();
 
   await runReviewPipeline(baseInput);
 
   const codeReviewer = calls.find((c) => c.kind === "code-reviewer")!;
-  assert.deepEqual(codeReviewer.systemPartCacheControl, [true]);
+  assert.deepEqual(codeReviewer.systemPartCacheControl, [true, true]);
+});
+
+test("appends output-efficiency instructions to both review personas, but not to test-generation (whose output is executable JS, not prose)", async () => {
+  resetState();
+
+  await runReviewPipeline(baseInput);
+
+  const byKind = Object.fromEntries(calls.map((c) => [c.kind, c]));
+  assert.match(byKind["code-reviewer"]!.systemText, /Output Efficiency/);
+  assert.match(byKind["security-auditor"]!.systemText, /Output Efficiency/);
+  assert.doesNotMatch(byKind["test-generator"]!.systemText, /Output Efficiency/);
+});
+
+test("scales the output token cap with the number of changed files in the --diff batch, instead of a flat constant, and shares it across all three calls", async () => {
+  resetState();
+
+  await runReviewPipeline({
+    ...baseInput,
+    changedFiles: Array.from({ length: 17 }, (_, i) => `src/file${i}.ts`),
+  });
+
+  const expected = resolveMaxOutputTokens(17);
+  // The 17-file batch from issue #33 that motivated this: BASE_OUTPUT_TOKENS
+  // (4096) + 16 additional files should push the cap comfortably above the old
+  // flat 4096 constant that silently produced an empty review.
+  assert.ok(expected > 4096, `expected the scaled cap for 17 files (${expected}) to exceed the old flat 4096`);
+  for (const call of calls) {
+    assert.equal(call.maxOutputTokens, expected, `${call.kind} call should use the scaled cap`);
+  }
+});
+
+test("caps the scaled output token budget at a fixed ceiling instead of growing without bound for a pathological batch size", async () => {
+  resetState();
+
+  await runReviewPipeline({ ...baseInput, changedFiles: Array.from({ length: 500 }, (_, i) => `file${i}.ts`) });
+
+  const expected = resolveMaxOutputTokens(500);
+  assert.ok(calls.length > 0);
+  for (const call of calls) {
+    assert.equal(call.maxOutputTokens, expected);
+  }
+});
+
+test("uses the base output token cap for a single-file review, matching the pre-#33 default", async () => {
+  resetState();
+
+  await runReviewPipeline(baseInput);
+
+  assert.equal(resolveMaxOutputTokens(1), 4096);
+  for (const call of calls) {
+    assert.equal(call.maxOutputTokens, 4096);
+  }
 });
