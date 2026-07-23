@@ -8,7 +8,7 @@ import { getFileDiff, getChangedFiles, getDiffAgainstTarget } from "./services/g
 import { runReviewPipeline, type ReviewStage } from "./services/ai-orchestrator.js";
 import { buildReportMarkdown } from "./services/report.js";
 import { getRepoSlugFromGit, postPrComment } from "./services/github-client.js";
-import { MODEL_ENV_VAR, PROVIDER_IDS, type ProviderId } from "./utils/model-factory.js";
+import { createModel, getModelId, MODEL_ENV_VAR, PROVIDER_IDS, type ProviderId } from "./utils/model-factory.js";
 
 const program = new Command();
 
@@ -48,6 +48,7 @@ const STAGE_MESSAGES: Record<ReviewStage, string> = {
 
 interface ReviewOptions {
   provider: ProviderId;
+  model?: string;
   output?: string;
   pr?: string;
   repo?: string;
@@ -64,6 +65,10 @@ program
     new Option("--provider <type>", "AI provider to use for the review agents")
       .choices(PROVIDER_IDS)
       .default("anthropic"),
+  )
+  .option(
+    "-m, --model <name>",
+    "override the model used for --provider (default: the provider's built-in default; takes precedence over SCRUTINEER_MODEL_*)",
   )
   .option("--output <path>", "write the aggregated report to a Markdown file")
   .option("--pr <number>", "post the aggregated report as a comment on this PR number")
@@ -124,6 +129,9 @@ program
     clack.intro("scrutineer review");
 
     try {
+      const model = await createModel(options.provider, options.model);
+      clack.log.info(`Using provider "${options.provider}" with model "${getModelId(model)}"`);
+
       let astContext = "";
       let diff = "";
       let reportMarkdown = "";
@@ -185,15 +193,16 @@ program
 
       await clack.tasks([
         {
-          title: `Run AI review pipeline (${options.provider})`,
+          title: `Run AI review pipeline (${options.provider} / ${getModelId(model)})`,
           task: async (message) => {
             const result = await runReviewPipeline(
-              { filePath: label, astContext, diff, provider: options.provider },
+              { filePath: label, astContext, diff, provider: options.provider, model },
               (stage) => message(STAGE_MESSAGES[stage]),
             );
             reportMarkdown = buildReportMarkdown({
               filePath: label,
               provider: options.provider,
+              model: getModelId(model),
               result,
             });
             return "Review pipeline complete";

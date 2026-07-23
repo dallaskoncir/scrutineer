@@ -84,6 +84,18 @@ test("createModel(gemini) respects SCRUTINEER_MODEL_GEMINI", async (t) => {
   assert.equal(modelId(model), "gemini-1.5-pro");
 });
 
+test("createModel(anthropic) prefers an explicit modelOverride over SCRUTINEER_MODEL_ANTHROPIC", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_ANTHROPIC", "claude-opus-4-8");
+  const model = await createModel("anthropic", "claude-haiku-4-5-20251001");
+  assert.equal(modelId(model), "claude-haiku-4-5-20251001");
+});
+
+test("createModel(anthropic) uses modelOverride when no env var is set", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_ANTHROPIC", undefined);
+  const model = await createModel("anthropic", "claude-haiku-4-5-20251001");
+  assert.equal(modelId(model), "claude-haiku-4-5-20251001");
+});
+
 test("createModel(ollama) respects SCRUTINEER_MODEL_OLLAMA without querying Ollama", async (t) => {
   withEnv(t, "SCRUTINEER_MODEL_OLLAMA", "phi4");
   withMockFetch(t, (async () => {
@@ -92,6 +104,16 @@ test("createModel(ollama) respects SCRUTINEER_MODEL_OLLAMA without querying Olla
 
   const model = await createModel("ollama");
   assert.equal(modelId(model), "phi4");
+});
+
+test("createModel(ollama) respects a modelOverride without querying Ollama", async (t) => {
+  withEnv(t, "SCRUTINEER_MODEL_OLLAMA", undefined);
+  withMockFetch(t, (async () => {
+    throw new Error("fetch should not be called when a modelOverride is passed");
+  }) as typeof fetch);
+
+  const model = await createModel("ollama", "llama3.1:8b");
+  assert.equal(modelId(model), "llama3.1:8b");
 });
 
 test("createModel(ollama) still targets OLLAMA_HOST when SCRUTINEER_MODEL_OLLAMA skips detection", async (t) => {

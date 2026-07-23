@@ -4,6 +4,7 @@ import type { ProviderId } from "../utils/model-factory.js";
 export interface ReportInput {
   filePath: string;
   provider: ProviderId;
+  model: string;
   result: ReviewResult;
   generatedAt?: Date;
 }
@@ -20,7 +21,7 @@ export function codeFence(code: string): string {
 }
 
 export function buildReportMarkdown(input: ReportInput): string {
-  const { filePath, provider, result, generatedAt = new Date() } = input;
+  const { filePath, provider, model, result, generatedAt = new Date() } = input;
   const { codeReview, securityAudit, sandboxTest } = result;
   const sandboxStatus = sandboxTest.result.ok ? "PASS" : "FAILED";
   const fence = codeFence(sandboxTest.code);
@@ -30,6 +31,7 @@ export function buildReportMarkdown(input: ReportInput): string {
     "",
     `- **File:** \`${filePath}\``,
     `- **Provider:** ${provider}`,
+    `- **Model:** ${model}`,
     `- **Generated:** ${generatedAt.toISOString()}`,
     "",
     "## Code Review",

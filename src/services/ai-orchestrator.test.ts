@@ -123,7 +123,6 @@ mock.module("ai", {
 
 mock.module("../utils/model-factory.js", {
   namedExports: {
-    createModel: () => ({ modelId: "mock-model" }),
     getModelId: (model: { modelId: string }) => model.modelId,
   },
 });
@@ -152,6 +151,7 @@ const baseInput = {
   astContext: "ctx",
   diff: "diff",
   provider: "anthropic" as const,
+  model: { modelId: "mock-model" } as unknown as import("ai").LanguageModel,
 };
 
 test("returns the codeReview/securityAudit/sandboxTest shape assembled from all three passes", async () => {

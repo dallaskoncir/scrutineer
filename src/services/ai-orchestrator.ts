@@ -8,7 +8,7 @@ import {
   type TextPart,
 } from "ai";
 import { loadPersonaPrompt, type PersonaPrompt } from "./prompt-loader.js";
-import { createModel, getModelId, type ProviderId } from "../utils/model-factory.js";
+import { getModelId, type ProviderId } from "../utils/model-factory.js";
 import { runInSandbox, type SandboxResult } from "./sandbox.js";
 
 // Bounds how much file content and model output a single review can consume, so a
@@ -42,6 +42,12 @@ export interface ReviewInput {
   astContext: string;
   diff: string;
   provider: ProviderId;
+  // Resolved by the caller (via the Model Factory's createModel()) rather than
+  // inside the pipeline itself, so the CLI can print the provider/model it
+  // settled on — including any Ollama auto-detection — before kicking off the
+  // review, without paying for a second resolution (and, for Ollama, a second
+  // detection round-trip) here.
+  model: LanguageModel;
 }
 
 export interface SandboxTestOutcome {
@@ -240,7 +246,7 @@ export async function runReviewPipeline(
   onProgress?: ReviewProgressCallback,
 ): Promise<ReviewResult> {
   onProgress?.("loading-personas");
-  const model = await createModel(input.provider);
+  const model = input.model;
   const [codeReviewer, securityAuditor] = await Promise.all([
     loadPersonaPrompt("code-reviewer"),
     loadPersonaPrompt("security-auditor"),
