@@ -375,22 +375,13 @@ async function generateSandboxTest(
   abortSignal: AbortSignal,
   maxOutputTokens: number,
 ): Promise<string> {
-  // Fixed, scrutineer-authored text identical on every call, called once per
-  // run just like the two persona prompts — so it gets the same cacheControl
-  // treatment for the same cross-invocation win (issue #39 follow-up: this was
-  // the one system prompt Phase 8's caching pass missed, since it's hardcoded
-  // here rather than loaded via prompt-loader.ts like the personas).
-  const cacheControl = cacheControlProviderOptions(provider);
-  const system: SystemModelMessage = cacheControl
-    ? { role: "system", content: TEST_GENERATOR_SYSTEM_PROMPT, providerOptions: cacheControl }
-    : { role: "system", content: TEST_GENERATOR_SYSTEM_PROMPT };
   let text: string;
   let usage: LanguageModelUsage;
   let finishReason: FinishReason;
   try {
     ({ text, usage, finishReason } = await generateText({
       model,
-      system,
+      system: TEST_GENERATOR_SYSTEM_PROMPT,
       messages: [buildUserMessage(cacheableSection, provider)],
       maxOutputTokens,
       abortSignal,

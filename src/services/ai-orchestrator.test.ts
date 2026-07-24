@@ -385,16 +385,13 @@ test("marks the persona system prompt and the AST/diff user content as cacheable
   await runReviewPipeline(baseInput);
 
   // code-reviewer and security-auditor both use a persona system prompt, so both
-  // get system-level cache control. test-generator's system prompt is a
-  // hardcoded string rather than a persona, but it's still fixed,
-  // scrutineer-authored text reused on every run, so it gets the same
-  // system-level cache control for the same cross-invocation win (the one gap
-  // left over from Phase 8's caching pass). All three share the same AST/diff
+  // get system-level cache control; test-generator's system prompt is a hardcoded
+  // string (not a persona), so it never does. All three share the same AST/diff
   // user content, so all three get user-level cache control.
   const byKind = Object.fromEntries(calls.map((c) => [c.kind, c]));
   assert.equal(byKind["code-reviewer"]?.hasSystemCacheControl, true);
   assert.equal(byKind["security-auditor"]?.hasSystemCacheControl, true);
-  assert.equal(byKind["test-generator"]?.hasSystemCacheControl, true);
+  assert.equal(byKind["test-generator"]?.hasSystemCacheControl, false);
   assert.equal(byKind["code-reviewer"]?.hasUserCacheControl, true);
   assert.equal(byKind["security-auditor"]?.hasUserCacheControl, true);
   assert.equal(byKind["test-generator"]?.hasUserCacheControl, true);
