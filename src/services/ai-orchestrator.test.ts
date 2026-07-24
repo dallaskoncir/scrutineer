@@ -574,11 +574,20 @@ test("resolveMaxOutputTokens: base case, linear scaling, zero/negative-safe inpu
   // test itself, so a regression in the constants (BASE_OUTPUT_TOKENS,
   // PER_ADDITIONAL_FILE_OUTPUT_TOKENS, OUTPUT_TOKENS_CEILING) actually fails
   // this test instead of just being self-consistent with a changed formula.
+  // PER_ADDITIONAL_FILE_OUTPUT_TOKENS is now derived (issue #39) as
+  // ceil((16384 - 4096) / (10 - 1)) = 1366, so the ceiling lands right at
+  // MAX_FILES_PER_CHUNK (10) — the largest file count a single chunk ever
+  // actually sees — instead of being reachable only at a pathological 49 files.
   assert.equal(resolveMaxOutputTokens(0), 4096, "0 files (not reachable today, but shouldn't crash or go negative)");
   assert.equal(resolveMaxOutputTokens(1), 4096, "single-file review keeps the pre-#33 default");
-  assert.equal(resolveMaxOutputTokens(2), 4352, "one additional file adds exactly one PER_ADDITIONAL_FILE increment");
-  assert.equal(resolveMaxOutputTokens(17), 8192, "the 17-file batch from issue #33's repro");
-  assert.equal(resolveMaxOutputTokens(49), 16384, "unclamped formula lands exactly on the ceiling at 49 files");
+  assert.equal(resolveMaxOutputTokens(2), 5462, "one additional file adds exactly one PER_ADDITIONAL_FILE increment");
+  assert.equal(resolveMaxOutputTokens(9), 15024, "just under the max chunk size stays just under the ceiling, unclamped");
+  assert.equal(
+    resolveMaxOutputTokens(10),
+    16384,
+    "a full-size chunk (MAX_FILES_PER_CHUNK) now reaches the full ceiling instead of using only ~39% of it (issue #39)",
+  );
+  assert.equal(resolveMaxOutputTokens(17), 16384, "the 17-file batch from issue #33's repro — now chunked, but the raw formula still clamps correctly");
   assert.equal(resolveMaxOutputTokens(50), 16384, "50 files would exceed the ceiling unclamped — proves Math.min is actually clamping, not coincidentally equal");
   assert.equal(resolveMaxOutputTokens(500), 16384, "a pathological batch size stays clamped at the ceiling");
 });
@@ -588,13 +597,14 @@ test("scales the output token cap with the number of changed files in the --diff
 
   await runReviewPipeline({
     ...baseInput,
-    changedFiles: Array.from({ length: 17 }, (_, i) => `src/file${i}.ts`),
+    changedFiles: Array.from({ length: 5 }, (_, i) => `src/file${i}.ts`),
   });
 
-  // 4096 (base) + 16 additional files * 256 = 8192 — the 17-file batch from
-  // issue #33 that silently produced an empty review under the old flat 4096 cap.
+  // 4096 (base) + 4 additional files * 1366 = 9560 — a batch small enough that
+  // the scaled cap isn't clamped by the ceiling, so this actually exercises the
+  // scaling formula rather than the clamp (which the ceiling test below covers).
   for (const call of calls) {
-    assert.equal(call.maxOutputTokens, 8192, `${call.kind} call should use the scaled cap`);
+    assert.equal(call.maxOutputTokens, 9560, `${call.kind} call should use the scaled cap`);
   }
 });
 
