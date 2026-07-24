@@ -68,7 +68,10 @@ const OUTPUT_EFFICIENCY_INSTRUCTIONS = `## Output Efficiency
 Your response has a bounded token budget. To make the most of it:
 - Use terse, information-dense bullet points rather than long prose paragraphs.
 - Reference code by file, line number, or symbol name instead of re-quoting large blocks of the diff or AST context back in your response.
-- Lead with the most significant findings; note minor or low-severity items briefly rather than at length.`;
+- Lead with the most significant findings; note minor or low-severity items in one line each, not a full explanation.
+- Keep suggested-fix code snippets to the minimal changed lines needed to show the delta — not a full reimplementation of the surrounding function.
+- State each finding once. Do not restate the same root cause under multiple headings or severities.
+- If you're running low on budget, finish the current finding cleanly and stop — do not leave a bullet or code block truncated mid-line.`;
 
 // Bounds every model call on its own, so a broken provider (bad key, unreachable
 // host, model not found) fails in bounded time instead of hanging indefinitely —
@@ -372,6 +375,16 @@ async function generateSandboxTest(
   abortSignal: AbortSignal,
   maxOutputTokens: number,
 ): Promise<string> {
+  // Deliberately NOT given its own cacheControl breakpoint, unlike the two
+  // persona prompts in runPersona(). TEST_GENERATOR_SYSTEM_PROMPT is ~235
+  // tokens on its own — well under Anthropic's documented ~1024-token minimum
+  // cacheable prefix for Sonnet/Opus-tier models (same reasoning already
+  // documented on OUTPUT_EFFICIENCY_INSTRUCTIONS above, which is folded into
+  // the persona prompt instead of standing alone for exactly this reason). A
+  // breakpoint here would be a silent no-op: providerOptions gets set, but the
+  // API never actually writes to or reads from cache for it. Tried this once
+  // (see the reverted "cache the test-generator's system prompt" commit) and a
+  // PR review caught it before merge.
   let text: string;
   let usage: LanguageModelUsage;
   let finishReason: FinishReason;
