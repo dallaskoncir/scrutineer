@@ -13,6 +13,7 @@ import { loadPersonaPrompt, type PersonaPrompt } from "./prompt-loader.js";
 import { getModelId, type ProviderId } from "../utils/model-factory.js";
 import { runInSandbox, type SandboxResult } from "./sandbox.js";
 import { buildDynamicSkillInstructions } from "./skill-router.js";
+import { MAX_FILES_PER_CHUNK } from "./review-chunker.js";
 
 // Bounds how much file content and model output a single review can consume, so a
 // huge or generated input file can't blow up token cost or hang on context limits.
@@ -31,7 +32,6 @@ export const MAX_SECTION_CHARS = 40_000;
 // nothing when a review doesn't need the extra room — it only matters for the
 // batches that actually do.
 const BASE_OUTPUT_TOKENS = 4096;
-const PER_ADDITIONAL_FILE_OUTPUT_TOKENS = 256;
 // A hard ceiling regardless of batch size, so a pathological --diff (hundreds of
 // files) can't drive a single call's cost/latency arbitrarily high. A batch big
 // enough to still hit this still gets the visible truncation notice below rather
@@ -39,6 +39,18 @@ const PER_ADDITIONAL_FILE_OUTPUT_TOKENS = 256;
 // would remove the ceiling entirely but is a larger architecture change tracked
 // separately (see issue #35), not folded into this scaling fix.
 const OUTPUT_TOKENS_CEILING = 16_384;
+// Derived, not hardcoded: chunking (review-chunker.ts) means MAX_FILES_PER_CHUNK
+// is the largest file count a single code-review/security-audit call will ever
+// actually see in practice, so the per-file increment is sized to land the
+// ceiling right at that point. A flat 256/file increment (issue #39) meant a
+// full 10-file chunk only reached 6400/16384 tokens (~39% of the ceiling the
+// system already treats as an acceptable cost/latency tradeoff) and got cut off
+// mid-response on ordinary, non-pathological PRs. Deriving from the same
+// constants keeps this in sync automatically if either one changes, rather than
+// silently drifting back out of proportion the way the flat constant did.
+const PER_ADDITIONAL_FILE_OUTPUT_TOKENS = Math.ceil(
+  (OUTPUT_TOKENS_CEILING - BASE_OUTPUT_TOKENS) / (MAX_FILES_PER_CHUNK - 1),
+);
 
 // Exported so ai-orchestrator.test.ts can assert the scaling behavior against the
 // real, current formula instead of a duplicated one that could silently drift.
